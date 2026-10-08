@@ -309,6 +309,30 @@ pub const Fontconfig = struct {
         pub fn next(self: *DiscoverIterator) fontconfig.Error!?DeferredFace {
             if (self.i >= self.fonts.len) return null;
 
+            // BEGIN taken from https://github.com/ghostty-org/ghostty/discussions/13583#discussioncomment-17886704
+            const requested_slant: fontconfig.Slant =
+                @enumFromInt((try self.pattern.get(.slant, 0)).integer);
+            const matched_slant: fontconfig.Slant =
+                @enumFromInt((try self.fonts[self.i].get(.slant, 0)).integer);
+
+            const requested_weight =
+                (try self.pattern.get(.weight, 0)).integer;
+            const matched_weight = try self.fonts[self.i].get(.weight, 0);
+            const bold_min = @intFromEnum(fontconfig.Weight.demibold);
+            const weight_mismatch = requested_weight >= bold_min and
+                switch (matched_weight) {
+                    .integer => |weight| weight < bold_min,
+                    .range => false,
+                    else => true,
+                };
+
+            if ((requested_slant != .roman and matched_slant == .roman) or
+                weight_mismatch)
+            {
+                return null;
+            }
+            //END
+
             // Get the copied pattern from our fontset that has the
             // attributes configured for rendering.
             const font_pattern = try self.config.fontRenderPrepare(
